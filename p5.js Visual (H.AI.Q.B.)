@@ -1,0 +1,299 @@
+let topX = 2, bottomX = 2; // Initial points
+let topEta = 1.0, bottomEta = 1.8; // Initial stepsizes
+let topHistory = [], bottomHistory = []; // Track histories
+let topParticles = [], bottomParticles = []; // Particles
+let L = 1; // Smoothness constant
+let frameCountLimit = 100; // Max iterations
+let entanglementStrength = 0.01; // Quantum coupling strength
+let clickX = null, clickY = null; // Click point coordinates
+let clickTime = 0; // Track time since last click
+let clickColorIndex = 0; // Cycle through colors for click "X"
+const colors = ['#FF0000', '#FFA500', '#FFFF00', '#008000', '#0000FF', '#4B0082', '#EE82EE']; // Red, Orange, Yellow, Green, Blue, Indigo, Violet
+let halfHeight; // Declare globally
+const bowlOffset = 4.5; // Offset for parabola to reach 0 at x=3
+const clickInfluenceDecay = 0.98; // Decay factor for click influence
+
+function setup() {
+  createCanvas(800, 600); // Standard size
+  halfHeight = height / 2; // Initialize halfHeight globally
+  textSize(12); // Reduced for better fit
+  textAlign(LEFT, CENTER);
+  for (let i = 0; i < 10; i++) {
+    let col = color(colors[i % colors.length]);
+    topParticles.push({ x: random(-300, 300), y: random(-300, 300), vx: 0, vy: 0, trail: [], color: col });
+    bottomParticles.push({ x: random(-300, 300), y: random(-300, 300), vx: 0, vy: 0, trail: [], color: col });
+  }
+}
+
+function draw() {
+  // Background with transparent black hole at back layer
+  background(220, 220, 220, 50); // Opacity 50 for path visibility
+  noStroke();
+  fill(0, 0, 0, 100); // Transparent black (alpha 100)
+  ellipse(width / 2, height / 2, 50, 50); // Transparent black hole
+  textSize(16);
+  textAlign(CENTER, CENTER);
+  text('Black Hole', width / 3.8, height / 2 + 30); // Moved below to avoid hidden
+
+  // Horizontal separation line
+  stroke(0);
+  strokeWeight(2);
+  line(0, halfHeight, width, halfHeight);
+
+  // Clear labels for top and bottom
+  textSize(14);
+  textAlign(CENTER, TOP);
+  text('Classical (Top)', width / 1.1, halfHeight + 25); // Below line
+  textAlign(CENTER, BOTTOM);
+  text('Quantum (Bottom)', width / 1.1, halfHeight - 25); // Above line
+
+  // Top Half: Classical Convex Optimization (bowl facing away, open at top)
+  push();
+  translate(width / 2, halfHeight / 2); // Top center
+  scale(1, 1); // Normal orientation
+  stroke(0);
+  strokeWeight(1);
+  beginShape();
+  for (let xVal = -3; xVal <= 3; xVal += 0.1) {
+    let y = -0.5 * xVal * xVal + bowlOffset; // Open upward, curve at bottom
+    vertex(xVal * 50, y * 50);
+  }
+  endShape();
+
+  // Gradient descent with click perturbation
+  if (frameCount <= frameCountLimit) {
+    let grad = topX;
+    if (clickX !== null && clickY < halfHeight && frameCount - clickTime < 30) {
+      let clickOffset = ((clickX - width / 2) / 50) * (1 - pow(clickInfluenceDecay, frameCount - clickTime));
+      grad += clickOffset; // Perturb gradient based on click
+    }
+    let newX = topX - topEta * grad;
+    let fX = 0.5 * topX * topX;
+    topHistory.push({ x: topX, fX: fX });
+    topX = newX;
+  }
+
+  // Update and draw particles (Sketch 1: Anomalies with mouseX η)
+  topEta = map(mouseX, 0, width, 0, 2); // Control η with mouseX
+  topEta = constrain(topEta, 0, 2);
+  for (let p of topParticles) {
+    // Convexity check and anomaly
+    if (topHistory.length >= 3 && frameCount % 5 === 0) {
+      let s0 = topHistory[topHistory.length - 3].fX;
+      let s1 = topHistory[topHistory.length - 2].fX;
+      let s2 = topHistory[topHistory.length - 1].fX;
+      let delta2 = s2 - 2 * s1 + s0; // Second difference
+      if (delta2 < 0 && random() < 0.5) { // Anomaly if concave
+        p.x = topX * 50 + random(-20, 20);
+        p.y = (0.5 * topX * topX) * 50 + random(-20, 20); // Match function
+      }
+    }
+    // Click influence as a decaying wavefront
+    if (clickX !== null && clickY < halfHeight) {
+      let dx = (clickX - width / 2) / 50 - p.x;
+      let dy = (clickY - halfHeight / 2) / 50 - p.y;
+      let distToClick = dist(0, 0, dx, dy);
+      let influence = (1 / (1 + distToClick)) * (1 - pow(clickInfluenceDecay, frameCount - clickTime));
+      p.vx += dx * influence * 0.01;
+      p.vy += dy * influence * 0.01;
+    }
+    p.x += p.vx * 0.5; // Slowed movement
+    p.y += p.vy * 0.5;
+    p.vx *= 0.95; // Reduced dampening
+    p.vy *= 0.95;
+    noStroke();
+    fill(p.color);
+    ellipse(p.x, p.y, 10, 10);
+
+    // Fading trail
+    noFill();
+    beginShape();
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 20) p.trail.shift();
+    for (let t of p.trail) {
+      stroke(p.color, map(p.trail.indexOf(t), 0, p.trail.length - 1, 50, 255));
+      vertex(t.x, t.y);
+    }
+    endShape();
+  }
+
+  // Draw path
+  stroke(255, 0, 0);
+  noFill();
+  beginShape();
+  for (let h of topHistory) {
+    vertex(h.x * 50, h.fX * 50);
+  }
+  endShape();
+  pop();
+
+  // Bottom Half: Quantum Anomaly Mapping (bowl facing away, open at bottom)
+  push();
+  translate(width / 2, halfHeight + halfHeight / 2); // Bottom center
+  scale(1, 1); // Normal orientation
+  stroke(0);
+  strokeWeight(1);
+  beginShape();
+  for (let xVal = -3; xVal <= 3; xVal += 0.1) {
+    let y = 0.5 * xVal * xVal - bowlOffset; // Open downward, curve at top
+    vertex(xVal * 50, y * 50);
+  }
+  endShape();
+
+  // Gradient descent with click perturbation
+  if (frameCount <= frameCountLimit) {
+    let grad = bottomX;
+    if (clickX !== null && clickY > halfHeight && frameCount - clickTime < 30) {
+      let clickOffset = ((clickX - width / 2) / 50) * (1 - pow(clickInfluenceDecay, frameCount - clickTime));
+      grad += clickOffset; // Perturb gradient based on click
+    }
+    let newX = bottomX - bottomEta * grad;
+    let fX = 0.5 * bottomX * bottomX;
+    bottomHistory.push({ x: bottomX, fX: fX });
+    bottomX = newX;
+  }
+
+  // Update and draw particles (Sketch 2: Entanglement and Collapse)
+  entanglementStrength = map(mouseY, 0, height, 0, 0.1); // Control entanglement with mouseY
+  entanglementStrength = constrain(entanglementStrength, 0, 0.1);
+  let etaPerturb = map(mouseX, 0, width, -0.2, 0.2);
+  let effectiveEta = constrain(bottomEta + etaPerturb, 0, 2.5);
+  for (let i = 0; i < bottomParticles.length; i++) {
+    let p = bottomParticles[i];
+    // Entangle with nearest particle
+    let minDist = Infinity;
+    let nearest = null;
+    for (let j = 0; j < bottomParticles.length; j++) {
+      if (i !== j) {
+        let d = dist(p.x, p.y, bottomParticles[j].x, bottomParticles[j].y);
+        if (d < minDist) {
+          minDist = d;
+          nearest = bottomParticles[j];
+        }
+      }
+    }
+    if (nearest) {
+      p.vx += (nearest.x - p.x) * entanglementStrength * 0.5;
+      p.vy += (nearest.y - p.y) * entanglementStrength * 0.5;
+    }
+
+    // Click influence as a decaying wavefront
+    if (clickX !== null && clickY > halfHeight) {
+      let dx = (clickX - width / 2) / 50 - p.x;
+      let dy = (clickY - (halfHeight + halfHeight / 2)) / 50 - p.y;
+      let distToClick = dist(0, 0, dx, dy);
+      let influence = (1 / (1 + distToClick)) * (1 - pow(clickInfluenceDecay, frameCount - clickTime));
+      p.vx += dx * influence * 0.01;
+      p.vy += dy * influence * 0.01;
+    }
+
+    p.x += p.vx * 0.5; // Slowed movement
+    p.y += p.vy * 0.5;
+    p.vx *= 0.95; // Reduced dampening
+    p.vy *= 0.95;
+
+    // Anomaly and collapse
+    if (bottomHistory.length >= 3 && frameCount % 5 === 0) {
+      let s0 = bottomHistory[bottomHistory.length - 3].fX;
+      let s1 = bottomHistory[bottomHistory.length - 2].fX;
+      let s2 = bottomHistory[bottomHistory.length - 1].fX;
+      let delta2 = s2 - 2 * s1 + s0;
+      if (delta2 < 0 && random() < 0.5) {
+        p.x = bottomX * 50 + random(-20, 20);
+        p.y = (0.5 * bottomX * bottomX) * 50 + random(-20, 20);
+      }
+    }
+    let collapseRadius = map(mouseX, 0, width, 100, 300);
+    if (dist(0, 0, p.x, p.y) > collapseRadius) {
+      fill(0, 0, 255, 100);
+      ellipse(p.x, p.y, 20, 20);
+      p.x = random(-100, 100);
+      p.y = random(-100, 100);
+      p.vx = 0;
+      p.vy = 0;
+    }
+
+    noStroke();
+    fill(p.color);
+    ellipse(p.x, p.y, 10, 10);
+
+    // Fading trail
+    noFill();
+    beginShape();
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 20) p.trail.shift();
+    for (let t of p.trail) {
+      stroke(p.color, map(p.trail.indexOf(t), 0, p.trail.length - 1, 50, 255));
+      vertex(t.x, t.y);
+    }
+    endShape();
+  }
+
+  // Draw path
+  stroke(0, 255, 0);
+  noFill();
+  beginShape();
+  for (let h of bottomHistory) {
+    vertex(h.x * 50, h.fX * 50);
+  }
+  endShape();
+  pop();
+
+  // Draw transparent circle graph background
+  noFill();
+  stroke(0, 100); // Semi-transparent gray
+  for (let r = 50; r <= 300; r += 50) {
+    ellipse(width / 2, height / 2, r, r);
+  }
+
+  // Left Sidebar (Top Half Info)
+  fill(0);
+  textAlign(RIGHT, CENTER);
+  text(`Classical η = ${topEta.toFixed(2)} (MouseX: Left/Right)`, width * 0.33, height * 0.20);
+  if (topHistory.length >= 3) {
+    let s0 = topHistory[topHistory.length - 3].fX;
+    let s1 = topHistory[topHistory.length - 2].fX;
+    let s2 = topHistory[topHistory.length - 1].fX;
+    let delta2 = s2 - 2 * s1 + s0;
+    text(`Δ²s = ${delta2.toFixed(4)} (Convex if ≥ 0)`, width * 0.3, height * 0.3);
+    if (delta2 < 0) {
+      text(`Anomaly! Reduce η`, width * 0.1, height * 0.35);
+    } else {
+      text(`Convex Path`, width * 0.3, height * 0.35);
+    }
+  }
+  text(`x = ${topX.toFixed(2)}, f(x) = ${topHistory.length > 0 ? topHistory[topHistory.length - 1].fX.toFixed(2) : 0}`, width * 0.3, height * 0.4);
+  text(`Tip: η ≤ 1.75/L keeps convexity`, width * 0.3, height * 0.45);
+
+  // Right Sidebar (Bottom Half Info)
+  textAlign(LEFT, CENTER);
+  text(`Quantum η = ${bottomEta.toFixed(2)} (MouseX: Left/Right perturb)`, width * 0.6, height * 0.20);
+  text(`Entanglement = ${entanglementStrength.toFixed(2)} (MouseY: Up/Down)`, width * 0.6, height * 0.1);
+  text(`Anomalies = ${bottomParticles.length}`, width * 0.8, height * 0.7);
+  text(`Tip: Move mouseY for entanglement, mouseX for collapse`, width * 0.52, height * 0.9);
+
+  // Draw click "X" if set
+  if (clickX !== null && clickY !== null) {
+    stroke(colors[clickColorIndex]);
+    strokeWeight(3);
+    line(clickX - 10, clickY - 10, clickX + 10, clickY + 10);
+    line(clickX - 10, clickY + 10, clickX + 10, clickY - 10);
+  }
+}
+
+// Handle mouse click
+function mousePressed() {
+  clickX = mouseX;
+  clickY = mouseY;
+  clickTime = frameCount; // Record click time
+  clickColorIndex = (clickColorIndex + 1) % colors.length; // Cycle colors
+  // Reset math reference point based on click location
+  if (clickY < halfHeight) {
+    topX = (clickX - width / 2) / 50;
+    topHistory = [];
+  } else if (clickY > halfHeight) {
+    bottomX = (clickX - width / 2) / 50;
+    bottomHistory = [];
+  }
+  frameCount = 0;
+}
